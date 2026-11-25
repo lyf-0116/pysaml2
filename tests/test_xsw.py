@@ -22,6 +22,7 @@ class TestXSW:
     def setup_class(self):
         self.conf = config_factory("sp", dotname("server_conf"))
         self.ar = authn_response(self.conf, return_addrs="https://example.org/acs/post")
+        self.ar.require_response_signature = False
 
     @patch("saml2.response.validate_on_or_after", return_value=True)
     def test_signed_xsw_assertion_wrapper_should_fail(self, mock_validate_on_or_after):
@@ -91,6 +92,7 @@ class TestInvalidDepthFirstSig:
     def setup_class(self):
         self.conf = config_factory("sp", dotname("server_conf"))
         self.ar = authn_response(self.conf, return_addrs="https://example.org/acs/post")
+        self.ar.require_response_signature = False
 
     @patch("saml2.response.validate_on_or_after", return_value=True)
     def test_signed_assertion_first_sig_should_fail(self, mock_validate_on_or_after):

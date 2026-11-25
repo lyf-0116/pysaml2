@@ -68,6 +68,10 @@ class TestAuthnResponse:
             self.conf = config_factory("sp", dotname("server_conf"))
             self.conf.only_use_keys_in_metadata = False
             self.ar = authn_response(self.conf, "http://lingon.catalogix.se:8087/")
+            self.ar.do_not_verify = True
+            self.ar.require_response_signature = False
+            self.ar.require_signature = False
+            self.ar.require_signature_or_response_signature = False
 
     def test_verify_1(self):
         xml_response = f"{self._resp_}"
@@ -192,6 +196,10 @@ class TestAuthnResponse:
         </samlp:Response>"""
 
         resp = authn_response(self.conf, "https://sp.example.com/acs/post", asynchop=False, allow_unsolicited=True)
+        resp.do_not_verify = True
+        resp.require_response_signature = False
+        resp.require_signature = False
+        resp.require_signature_or_response_signature = False
         resp.loads(authn_response_xml, False)
         resp.parse_assertion()
         ava = resp.get_identity()
@@ -259,6 +267,10 @@ class TestAuthnResponse:
         </samlp:Response>"""
 
         resp = authn_response(self.conf, "https://sp.example.com/acs/post", asynchop=False, allow_unsolicited=True)
+        resp.do_not_verify = True
+        resp.require_response_signature = False
+        resp.require_signature = False
+        resp.require_signature_or_response_signature = False
         resp.loads(authn_response_xml, False)
         resp.parse_assertion()
         ava = resp.get_identity()

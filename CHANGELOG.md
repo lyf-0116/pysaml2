@@ -1,6 +1,16 @@
 # Changelog
 
 
+## Unreleased
+
+- Security: require assertion signatures by default and reject SAML responses
+  whose assertions are authenticated by neither an assertion nor a response
+  signature. Response-only deployments must explicitly set
+  `want_assertions_signed` to `False`. Signature requirements are now checked
+  per assertion, and missing signatures raise `SignatureMissing` instead of
+  being conflated with invalid signatures.
+
+
 ## v7.5.5 (2026-09-17)
 
 - Resolve CVE-2026-26007 by migrating to the from pyOpenSSL to the cryptography APIs

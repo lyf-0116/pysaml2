@@ -4,6 +4,7 @@ from saml2 import BINDING_HTTP_POST
 from saml2 import BINDING_HTTP_REDIRECT
 from saml2 import BINDING_SOAP
 from saml2 import pack
+from saml2 import samlp
 from saml2.authn_context import INTERNETPROTOCOLPASSWORD
 from saml2.samlp import attribute_query_from_string
 from saml2.samlp import logout_request_from_string
@@ -116,7 +117,9 @@ class FakeIDP(Server):
         identity = {"surName": "Hedberg", "givenName": "Roland", "title": "supertramp", "mail": "roland@example.com"}
         userid = "Pavill"
 
-        authn_resp = self.create_authn_response(identity, userid=userid, authn=AUTHN, **resp_args)
+        authn_resp = self.create_authn_response(
+            identity, userid=userid, authn=AUTHN, sign_response=True, **resp_args
+        )
 
         response = f"{authn_resp}"
 
@@ -135,8 +138,16 @@ class FakeIDP(Server):
 
         name_id = aquery.subject.name_id
         attr_resp = self.create_attribute_response(
-            extra, aquery.id, None, sp_entity_id=aquery.issuer.text, name_id=name_id, attributes=aquery.attribute
+            extra,
+            aquery.id,
+            None,
+            sp_entity_id=aquery.issuer.text,
+            name_id=name_id,
+            attributes=aquery.attribute,
+            sign_response=True,
         )
+        if isinstance(attr_resp, str):
+            attr_resp = samlp.any_response_from_string(attr_resp)
 
         if binding == BINDING_SOAP:
             # SOAP packing

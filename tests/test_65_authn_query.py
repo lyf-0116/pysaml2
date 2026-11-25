@@ -15,6 +15,7 @@ from saml2.saml import NAMEID_FORMAT_TRANSIENT
 from saml2.saml import NameID
 from saml2.saml import Subject
 from saml2.samlp import AuthnQuery
+from saml2.samlp import response_from_string
 from saml2.server import Server
 
 
@@ -83,15 +84,18 @@ def test_flow():
             sp.config.entityid,
             name_id=name_id,
             authn=AUTHN,
+            sign_response=True,
         )
+        if isinstance(resp, str):
+            resp = response_from_string(resp)
 
         hinfo = idp.apply_binding(binding, f"{resp}", destination, relay_state)
 
         # ------- @SP ----------
 
         xmlstr = get_msg(hinfo, binding)
-        # Explicitly allow unsigned responses for this test
-        sp.want_response_signed = False
+        # Explicitly exempt assertions from signing for this response-only flow.
+        sp.want_assertions_signed = False
         aresp = sp.parse_authn_request_response(xmlstr, binding, {resp.in_response_to: "/"})
 
         binding, destination = sp.pick_binding("authn_query_service", entity_id=idp.config.entityid)
@@ -118,7 +122,11 @@ def test_flow():
         msg = pm.message
         assert msg.id == aq.id
 
-        p_res = idp.create_authn_query_response(msg.subject, msg.session_index, msg.requested_authn_context)
+        p_res = idp.create_authn_query_response(
+            msg.subject, msg.session_index, msg.requested_authn_context, sign_response=True
+        )
+        if isinstance(p_res, str):
+            p_res = response_from_string(p_res)
 
         print(p_res)
 

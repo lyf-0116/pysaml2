@@ -102,6 +102,7 @@ def test_complete_flow():
             sp_entity_id,
             name_id=name_id,
             authn=AUTHN,
+            sign_response=True,
         )
 
         # ------------ @Client -----------------------------
@@ -138,8 +139,8 @@ def test_complete_flow():
                 assert inst.text == "XYZ"
 
         # parse the response
-        # Explicitly allow unsigned responses for this test
-        sp.want_response_signed = False
+        # Explicitly exempt assertions from signing for this response-only flow.
+        sp.want_assertions_signed = False
         resp = sp.parse_authn_request_response(respdict["body"], None, {sid: "/"})
 
         print(resp.response)

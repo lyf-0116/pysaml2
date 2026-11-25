@@ -1169,7 +1169,18 @@ Indicates if this SP wants the IdP to send the assertions signed. This
 sets the WantAssertionsSigned attribute of the SPSSODescriptor node
 of the metadata so the IdP will know this SP preference.
 
-Valid values are True or False. Default value is False.
+Valid values are True or False. Default value is True.
+
+When enabled, every assertion that contributes identity information must
+carry a valid signature. This includes assertions in an ``Advice`` element
+and assertions recovered from encrypted content.
+
+A deployment whose IdP signs only the enclosing response and not the
+assertion must opt out explicitly by setting this directive to False while
+keeping ``want_response_signed`` enabled. The opt-out is evaluated for each
+assertion: an unsigned assertion is accepted only when it is covered by a
+valid signature on the response. An unsigned assertion in an unsigned
+response is always rejected.
 
 Example::
 
@@ -1185,22 +1196,26 @@ want_assertions_or_response_signed
 Indicates that *either* the Authentication Response *or* the assertions
 contained within the response to this SP must be signed.
 
-Valid values are True or False. Default value is False.
+Valid values are True or False. Default value is True.
 
 This configuration directive **does not** override ``want_response_signed``
 or ``want_assertions_signed``. For example, if ``want_response_signed`` is True
 and the Authentication Response is not signed an exception will be thrown
 regardless of the value for this configuration directive.
 
-Thus to configure the SP to accept either a signed response or signed assertions
-set ``want_response_signed`` and ``want_assertions_signed`` both to False and
-this directive to True.
+Each assertion must be authenticated independently. When the response is not
+signed, every assertion must carry its own valid signature. A single signed
+assertion does not make additional unsigned assertions acceptable.
+
+Disabling all three signature requirements is rejected when the SP is
+initialised. To support an IdP that signs only the response, leave
+``want_response_signed`` enabled and disable only ``want_assertions_signed``.
 
 Example::
 
     "service": {
         "sp": {
-            "want_response_signed": False,
+            "want_response_signed": True,
             "want_assertions_signed": False,
             "want_assertions_or_response_signed": True,
         }

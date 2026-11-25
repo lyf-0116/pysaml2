@@ -78,6 +78,10 @@ class TestHolderOfKeyResponse:
             asynchop=False,
             allow_unsolicited=True,
         )
+        resp.do_not_verify = True
+        resp.require_response_signature = False
+        resp.require_signature = False
+        resp.require_signature_or_response_signature = False
         with open(path) as fp:
             authn_response_xml = fp.read()
         resp.loads(authn_response_xml, False)

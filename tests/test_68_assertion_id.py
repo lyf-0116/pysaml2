@@ -11,6 +11,7 @@ from saml2.saml import NAMEID_FORMAT_TRANSIENT
 from saml2.saml import Assertion
 from saml2.samlp import AuthnRequest
 from saml2.samlp import NameIDPolicy
+from saml2.samlp import response_from_string
 from saml2.server import Server
 
 
@@ -73,14 +74,16 @@ def test_basic_flow():
             sp.config.entityid,
             name_id=name_id,
             authn=AUTHN,
+            sign_assertion=True,
         )
+        if isinstance(resp, str):
+            resp = response_from_string(resp)
 
         hinfo = idp.apply_binding(binding, f"{resp}", destination, relay_state)
 
         # --------- @SP -------------
 
         xmlstr = get_msg(hinfo, binding)
-        # Explicitly allow unsigned responses for this test
         sp.want_response_signed = False
         aresp = sp.parse_authn_request_response(xmlstr, binding, {resp.in_response_to: "/"})
 

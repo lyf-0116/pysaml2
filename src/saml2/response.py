@@ -43,6 +43,7 @@ from saml2.samlp import STATUS_UNSUPPORTED_BINDING
 from saml2.samlp import STATUS_VERSION_MISMATCH
 from saml2.sigver import DecryptError
 from saml2.sigver import SignatureError
+from saml2.sigver import SignatureMissing
 from saml2.sigver import security_context
 from saml2.sigver import signed
 from saml2.time_util import later_than
@@ -229,7 +230,7 @@ def authn_response(
     timeslack=0,
     asynchop=True,
     allow_unsolicited=False,
-    want_assertions_signed=False,
+    want_assertions_signed=True,
     conv_info=None,
 ):
     sec = security_context(conf)
@@ -294,6 +295,7 @@ class StatusResponse:
         self.require_signature = False
         self.require_response_signature = False
         self.require_signature_or_response_signature = False
+        self.response_is_signed = False
         self.not_signed = False
         self.asynchop = asynchop
         self.do_not_verify = False
@@ -332,9 +334,11 @@ class StatusResponse:
             except SignatureError:
                 # The response as a whole might be signed or not
                 self.response = self.sec.check_signature(instance, f"{samlp.NAMESPACE}:Response")
+            self.response_is_signed = True
         else:
             self.not_signed = True
             self.response = instance
+            self.response_is_signed = False
 
         return self._postamble()
 
@@ -373,6 +377,7 @@ class StatusResponse:
             logger.exception("EXCEPTION: %s", str(excp))
             raise
 
+        self.response_is_signed = bool(self.response.signature) and not self.do_not_verify
         return self._postamble()
 
     def status_ok(self):
@@ -435,6 +440,7 @@ class StatusResponse:
         self.xmlstr = mold.xmlstr
         self.in_response_to = mold.in_response_to
         self.response = mold.response
+        self.response_is_signed = mold.response_is_signed
 
     def issuer(self):
         issuer_value = (self.response.issuer.text if self.response.issuer is not None else "").strip()
@@ -486,9 +492,9 @@ class AuthnResponse(StatusResponse):
         allow_unsolicited=False,
         test=False,
         allow_unknown_attributes=False,
-        want_assertions_signed=False,
-        want_assertions_or_response_signed=False,
-        want_response_signed=False,
+        want_assertions_signed=True,
+        want_assertions_or_response_signed=True,
+        want_response_signed=True,
         conv_info=None,
         **kwargs,
     ):
@@ -510,6 +516,8 @@ class AuthnResponse(StatusResponse):
         self.require_signature = want_assertions_signed
         self.require_signature_or_response_signature = want_assertions_or_response_signed
         self.require_response_signature = want_response_signed
+        self.assertions_all_signed = True
+        self.assertions_seen = 0
         self.test = test
         self.allow_unknown_attributes = allow_unknown_attributes
         #
@@ -654,6 +662,38 @@ class AuthnResponse(StatusResponse):
         self.decrypt_attributes(attr_statem)
         return to_local(self.attribute_converters, attr_statem, self.allow_unknown_attributes)
 
+    def _verify_advice_assertion(self, assertion):
+        """Authenticate an assertion carried in an Advice element.
+
+        Advice assertions can contribute identity attributes, so they are
+        subject to the same rule as primary assertions: either the assertion
+        is individually signed, or an explicit assertion-signature exemption
+        is active and the enclosing response is signed.
+        """
+        if getattr(assertion, "_pysaml2_signature_verified", False):
+            return
+
+        if self.do_not_verify:
+            return
+
+        if getattr(assertion, "signature", None):
+            self.sec.check_signature(assertion, class_name(assertion), self.xmlstr)
+            assertion._pysaml2_signature_verified = True
+            return
+
+        if self.require_signature:
+            raise SignatureMissing(
+                "Signature missing for advice assertion"
+                f" {getattr(assertion, 'id', '<unknown>')};"
+                " want_assertions_signed requires an assertion signature"
+            )
+        if not self.response_is_signed:
+            raise SignatureMissing(
+                "Signature missing for advice assertion"
+                f" {getattr(assertion, 'id', '<unknown>')};"
+                " neither the assertion nor the response is signed"
+            )
+
     def get_identity(self):
         """The assertion can contain zero or more attributeStatements"""
         ava = {}
@@ -661,6 +701,7 @@ class AuthnResponse(StatusResponse):
             if _assertion.advice:
                 if _assertion.advice.assertion:
                     for tmp_assertion in _assertion.advice.assertion:
+                        self._verify_advice_assertion(tmp_assertion)
                         if tmp_assertion.attribute_statement:
                             n_attr_statements = len(tmp_assertion.attribute_statement)
                             if n_attr_statements != 1:
@@ -781,10 +822,22 @@ class AuthnResponse(StatusResponse):
         :return: True/False depending on if the assertion is sane or not
         """
 
+        self.assertions_seen += 1
         if not hasattr(assertion, "signature") or not assertion.signature:
             logger.debug("unsigned")
-            if self.require_signature:
-                raise SignatureError("Signature missing for assertion")
+            self.assertions_all_signed = False
+            if not self.do_not_verify and self.require_signature:
+                raise SignatureMissing(
+                    "Signature missing for assertion"
+                    f" {getattr(assertion, 'id', '<unknown>')};"
+                    " want_assertions_signed requires an assertion signature"
+                )
+            if not self.do_not_verify and not self.response_is_signed:
+                raise SignatureMissing(
+                    "Signature missing for assertion"
+                    f" {getattr(assertion, 'id', '<unknown>')};"
+                    " neither the assertion nor the response is signed"
+                )
         else:
             logger.debug("signed")
             if not verified and self.do_not_verify is False:
@@ -793,7 +846,10 @@ class AuthnResponse(StatusResponse):
                 except Exception as exc:
                     logger.error("The signature on the assertion cannot be verified.")
                     logger.debug("correctly_signed_response: %s", exc)
-                    raise
+                    raise SignatureError(
+                        "Failed to verify signature on assertion"
+                        f" {getattr(assertion, 'id', '<unknown>')}: {exc}"
+                    ) from exc
 
         self.assertion = assertion
         logger.debug("assertion context: %s", self.context)
@@ -1172,6 +1228,9 @@ class AuthnQueryResponse(AuthnResponse):
         timeslack=0,
         asynchop=False,
         test=False,
+        want_assertions_signed=True,
+        want_assertions_or_response_signed=True,
+        want_response_signed=True,
         conv_info=None,
     ):
         AuthnResponse.__init__(
@@ -1183,6 +1242,9 @@ class AuthnQueryResponse(AuthnResponse):
             timeslack=timeslack,
             asynchop=asynchop,
             test=test,
+            want_assertions_signed=want_assertions_signed,
+            want_assertions_or_response_signed=want_assertions_or_response_signed,
+            want_response_signed=want_response_signed,
             conv_info=conv_info,
         )
         self.entity_id = entity_id
@@ -1206,6 +1268,9 @@ class AttributeResponse(AuthnResponse):
         timeslack=0,
         asynchop=False,
         test=False,
+        want_assertions_signed=True,
+        want_assertions_or_response_signed=True,
+        want_response_signed=True,
         conv_info=None,
     ):
         AuthnResponse.__init__(
@@ -1217,6 +1282,9 @@ class AttributeResponse(AuthnResponse):
             timeslack=timeslack,
             asynchop=asynchop,
             test=test,
+            want_assertions_signed=want_assertions_signed,
+            want_assertions_or_response_signed=want_assertions_or_response_signed,
+            want_response_signed=want_response_signed,
             conv_info=conv_info,
         )
         self.entity_id = entity_id
@@ -1239,6 +1307,9 @@ class AuthzResponse(AuthnResponse):
         return_addrs=None,
         timeslack=0,
         asynchop=False,
+        want_assertions_signed=True,
+        want_assertions_or_response_signed=True,
+        want_response_signed=True,
         conv_info=None,
     ):
         AuthnResponse.__init__(
@@ -1249,6 +1320,9 @@ class AuthzResponse(AuthnResponse):
             return_addrs,
             timeslack=timeslack,
             asynchop=asynchop,
+            want_assertions_signed=want_assertions_signed,
+            want_assertions_or_response_signed=want_assertions_or_response_signed,
+            want_response_signed=want_response_signed,
             conv_info=conv_info,
         )
         self.entity_id = entity_id
@@ -1269,6 +1343,9 @@ class ArtifactResponse(AuthnResponse):
         timeslack=0,
         asynchop=False,
         test=False,
+        want_assertions_signed=True,
+        want_assertions_or_response_signed=True,
+        want_response_signed=True,
         conv_info=None,
     ):
         AuthnResponse.__init__(
@@ -1280,6 +1357,9 @@ class ArtifactResponse(AuthnResponse):
             timeslack=timeslack,
             asynchop=asynchop,
             test=test,
+            want_assertions_signed=want_assertions_signed,
+            want_assertions_or_response_signed=want_assertions_or_response_signed,
+            want_response_signed=want_response_signed,
             conv_info=conv_info,
         )
         self.entity_id = entity_id
@@ -1299,7 +1379,9 @@ def response_factory(
     origxml=None,
     asynchop=True,
     allow_unsolicited=False,
-    want_assertions_signed=False,
+    want_assertions_signed=True,
+    want_assertions_or_response_signed=True,
+    want_response_signed=True,
     conv_info=None,
 ):
     sec_context = security_context(conf)
@@ -1314,6 +1396,7 @@ def response_factory(
     extension_schema = conf.extension_schema
 
     response = StatusResponse(sec_context, return_addrs, timeslack, request_id, asynchop, conv_info=conv_info)
+    response.require_response_signature = want_response_signed
     try:
         response.loads(xmlstr, decode, origxml)
         if response.response.assertion or response.response.encrypted_assertion:
@@ -1328,6 +1411,8 @@ def response_factory(
                 allow_unsolicited,
                 extension_schema=extension_schema,
                 want_assertions_signed=want_assertions_signed,
+                want_assertions_or_response_signed=want_assertions_or_response_signed,
+                want_response_signed=want_response_signed,
                 conv_info=conv_info,
             )
             authnresp.update(response)

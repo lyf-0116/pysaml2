@@ -169,6 +169,8 @@ class TestClient:
         conf = config.SPConfig()
         conf.load_file("server_conf")
         self.client = Saml2Client(conf)
+        # Exercise the explicit response-only signing exemption.
+        self.client.want_assertions_signed = False
 
     def setup_method(self):
         self.server.config.setattr("idp", "want_authn_requests_signed", None)
@@ -576,6 +578,7 @@ class TestClient:
         conf = config.SPConfig()
         conf.load_file("server_conf")
         _client = Saml2Client(conf)
+        _client.want_assertions_signed = False
 
         idp, ava, ava_verify, nameid_policy = self.setup_verify_authn_response()
 
@@ -610,6 +613,7 @@ class TestClient:
         conf = config.SPConfig()
         conf.load_file("server_conf")
         _client = Saml2Client(conf)
+        _client.want_assertions_signed = False
 
         idp, ava, ava_verify, nameid_policy = self.setup_verify_authn_response()
 
@@ -837,13 +841,20 @@ class TestClient:
         # the parsing below is a fair test.
         assert str(resp).find("NameID") == -1
 
+        # Sign the response after modifying it, so the test still exercises
+        # response-only signature enforcement.
+        resp.signature = sigver.pre_signature_part(resp.id, self.server.sec.my_cert, 1)
+        resp = self.server.sec.sign_statement(
+            str(resp), class_name(resp), key_file=self.server.sec.key_file, node_id=resp.id
+        )
+
         # Cast the response to a string and encode it to mock up the payload
         # the SP client is expected to receive via HTTP POST binding.
         resp_str = b64encode(str(resp).encode())
 
-        # We do not need the client to verify a signature for this test.
+        # This test relies on the explicit response-only signing exemption.
         client.want_assertions_signed = False
-        client.want_response_signed = False
+        client.want_response_signed = True
 
         # Parse the authentication response that does not include a <NameID>.
         authn_response = client.parse_authn_request_response(
@@ -1093,6 +1104,17 @@ class TestClient:
 
         enctext = _sec.crypto.encrypt_assertion(
             response, self.client.sec.encryption_keypairs[0]["cert_file"], pre_encryption_part(), node_xpath=node_xpath
+        )
+
+        encrypted_response = samlp.response_from_string(enctext)
+        encrypted_response.signature = sigver.pre_signature_part(
+            encrypted_response.id, _sec.my_cert, 1
+        )
+        enctext = _sec.sign_statement(
+            str(encrypted_response),
+            class_name(encrypted_response),
+            key_file=self.server.sec.key_file,
+            node_id=encrypted_response.id,
         )
 
         # seresp = samlp.response_from_string(enctext)
@@ -1829,7 +1851,8 @@ class TestClient:
             parse_authn_response(response)
 
         set_client_want(False, False, False)
-        parse_authn_response(response)
+        with raises(SignatureError):
+            parse_authn_response(response)
 
 
 class TestClientNonAsciiAva:
@@ -1839,6 +1862,7 @@ class TestClientNonAsciiAva:
         conf = config.SPConfig()
         conf.load_file("server_conf")
         self.client = Saml2Client(conf)
+        self.client.want_assertions_signed = False
 
     def teardown_class(self):
         self.server.close()
@@ -2173,6 +2197,7 @@ class TestClientNonAsciiAva:
         conf = config.SPConfig()
         conf.load_file("server_conf")
         _client = Saml2Client(conf)
+        _client.want_assertions_signed = False
 
         idp, ava, ava_verify, nameid_policy = self.setup_verify_authn_response()
 
@@ -2207,6 +2232,7 @@ class TestClientNonAsciiAva:
         conf = config.SPConfig()
         conf.load_file("server_conf")
         _client = Saml2Client(conf)
+        _client.want_assertions_signed = False
 
         idp, ava, ava_verify, nameid_policy = self.setup_verify_authn_response()
 
@@ -2436,13 +2462,20 @@ class TestClientNonAsciiAva:
         # the parsing below is a fair test.
         assert str(resp).find("NameID") == -1
 
+        # Sign the response after modifying it, so the test still exercises
+        # response-only signature enforcement.
+        resp.signature = sigver.pre_signature_part(resp.id, self.server.sec.my_cert, 1)
+        resp = self.server.sec.sign_statement(
+            str(resp), class_name(resp), key_file=self.server.sec.key_file, node_id=resp.id
+        )
+
         # Cast the response to a string and encode it to mock up the payload
         # the SP client is expected to receive via HTTP POST binding.
         resp_str = b64encode(bytes(str(resp), "utf-8"))
 
-        # We do not need the client to verify a signature for this test.
+        # This test relies on the explicit response-only signing exemption.
         client.want_assertions_signed = False
-        client.want_response_signed = False
+        client.want_response_signed = True
 
         # Parse the authentication response that does not include a <NameID>.
         authn_response = client.parse_authn_request_response(
@@ -2742,6 +2775,17 @@ class TestClientNonAsciiAva:
 
         enctext = _sec.crypto.encrypt_assertion(
             response, self.client.sec.encryption_keypairs[0]["cert_file"], pre_encryption_part(), node_xpath=node_xpath
+        )
+
+        encrypted_response = samlp.response_from_string(enctext)
+        encrypted_response.signature = sigver.pre_signature_part(
+            encrypted_response.id, _sec.my_cert, 1
+        )
+        enctext = _sec.sign_statement(
+            str(encrypted_response),
+            class_name(encrypted_response),
+            key_file=self.server.sec.key_file,
+            node_id=encrypted_response.id,
         )
 
         # seresp = samlp.response_from_string(enctext)
@@ -3149,6 +3193,7 @@ class TestClientWithDummy:
         conf = config.SPConfig()
         conf.load_file("servera_conf")
         self.client = Saml2Client(conf)
+        self.client.want_assertions_signed = False
 
         self.client.send = self.server.receive
 

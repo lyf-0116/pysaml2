@@ -96,6 +96,10 @@ class SignatureError(XmlsecError):
     pass
 
 
+class SignatureMissing(SignatureError):
+    """A required signature is not present."""
+
+
 class BadSignature(SigverError):
     """The signature is invalid."""
 
@@ -1558,7 +1562,7 @@ class SecurityContext:
             if must:
                 err_msg = "Required signature missing on {type}"
                 err_msg = err_msg.format(type=msgtype)
-                raise SignatureError(err_msg)
+                raise SignatureMissing(err_msg)
             else:
                 return msg
 
@@ -1656,7 +1660,7 @@ class SecurityContext:
             else:
                 self._check_signature(decoded_xml, response, class_name(response), origdoc)
         elif require_response_signature:
-            raise SignatureError("Signature missing for response")
+            raise SignatureMissing("Signature missing for response")
 
         return response
 

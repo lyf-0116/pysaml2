@@ -37,6 +37,7 @@ from saml2.s_utils import MissingValue
 from saml2.s_utils import Unknown
 from saml2.s_utils import rndstr
 from saml2.samlp import NameIDMappingResponse
+from saml2.samlp import response_from_string
 from saml2.schema import soapenv
 from saml2.sdb import SessionStorage
 from saml2.sigver import CertificateError
@@ -1077,6 +1078,8 @@ class Server(Entity):
             sign_alg=sign_alg,
             digest_alg=digest_alg,
         )
+        if isinstance(response, str):
+            response = response_from_string(response)
         body = soapenv.Body()
         body.extension_elements = [element_to_extension_element(response)]
 

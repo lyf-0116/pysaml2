@@ -255,10 +255,9 @@ class HTTPBase:
 
     @staticmethod
     def use_http_uri(message, typ, destination="", relay_state=""):
-        if "\n" in message:
-            data = message.split("\n")[1]
-        else:
-            data = message.strip()
+        data = message.strip()
+        if data.startswith("<?xml"):
+            data = data.split("?>", 1)[1].lstrip()
         if typ == "SAMLResponse":
             info = {
                 "data": data,

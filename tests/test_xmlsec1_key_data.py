@@ -20,6 +20,7 @@ class TestAuthnResponse:
     def test_signed_response_with_hmac_should_fail(self, mock_validate_on_or_after):
         conf = config_factory("sp", dotname("server_conf"))
         ar = authn_response(conf, return_addrs="https://example.org/acs/post")
+        ar.require_response_signature = False
         ar.issue_instant_ok = Mock(return_value=True)
 
         with open(SIGNED_RESPONSE_HMAC) as fp:
@@ -39,6 +40,7 @@ class TestAuthnResponse:
     def test_signed_assertion_with_hmac_should_fail(self, mock_validate_on_or_after):
         conf = config_factory("sp", dotname("server_conf"))
         ar = authn_response(conf, return_addrs="https://example.org/acs/post")
+        ar.require_response_signature = False
         ar.issue_instant_ok = Mock(return_value=True)
 
         with open(SIGNED_ASSERTION_HMAC) as fp:
@@ -64,6 +66,7 @@ class TestAuthnResponse:
 
         conf = config_factory("sp", dotname("server_conf"))
         ar = authn_response(conf, return_addrs="https://51.15.251.81.xip.io/acs/post")
+        ar.require_response_signature = False
         ar.issue_instant_ok = Mock(return_value=True)
 
         with open(SIGNED_ASSERTION_RANDOM_EMBEDDED_CERT) as fp:

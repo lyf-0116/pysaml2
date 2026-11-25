@@ -1489,29 +1489,14 @@ class Entity(HTTPBase):
                 for _cert in cert:
                     keys.append(_cert["key"])
 
-        try:
-            assertions_are_signed = False
-            # Record the assertions signature requirement.
-            require_signature = response.require_signature
-            # Force the requirement that the assertions be signed in order to
-            # force signature checking to happen so that we can know whether
-            # or not the assertions are signed. The attribute on the response class
-            # is reset to the recorded value in the finally clause below.
-            response.require_signature = True
-            # Verify that the assertion is syntactically correct and the
-            # signature on the assertion is correct if present.
-            response.verify(keys)
-        except SignatureError as err:
-            if require_signature:
-                logger.error("Signature Error: %s", str(err))
-                raise
-            else:
-                response.require_signature = require_signature
-                response.verify(keys)
-        else:
-            assertions_are_signed = True
-        finally:
-            response.require_signature = require_signature
+        # Verify that the assertion is syntactically correct and that every
+        # assertion is authenticated either by its own signature or, when
+        # explicitly allowed, by a valid signature on the enclosing response.
+        # The decision is made for each assertion inside AuthnResponse._assertion.
+        response.verify(keys)
+        assertions_are_signed = (
+            getattr(response, "assertions_seen", 0) > 0 and getattr(response, "assertions_all_signed", False)
+        )
 
         # If so configured enforce that either the response is signed
         # or the assertions within it are signed.
@@ -1646,7 +1631,13 @@ class Entity(HTTPBase):
         return artifact_resolve_from_string(_resp)
 
     def parse_artifact_resolve_response(self, xmlstr):
-        kwargs = {"entity_id": self.config.entityid, "attribute_converters": self.config.attribute_converters}
+        kwargs = {
+            "entity_id": self.config.entityid,
+            "attribute_converters": self.config.attribute_converters,
+            "want_assertions_signed": getattr(self, "want_assertions_signed", False),
+            "want_assertions_or_response_signed": getattr(self, "want_assertions_or_response_signed", False),
+            "want_response_signed": getattr(self, "want_response_signed", False),
+        }
 
         resp = self._parse_response(xmlstr, saml_response.ArtifactResponse, "artifact_resolve", BINDING_SOAP, **kwargs)
         # should just be one

@@ -11,7 +11,6 @@ from typing import Mapping
 from urllib.parse import parse_qs
 from urllib.parse import urlencode
 from urllib.parse import urlparse
-from warnings import warn as _warn
 
 import saml2
 from saml2 import BINDING_HTTP_POST
@@ -164,15 +163,15 @@ class Base(Entity):
             "logout_responses_signed": False,
             "allow_unsolicited": False,
             "authn_requests_signed": False,
-            "want_assertions_signed": False,
+            "want_assertions_signed": True,
             "want_response_signed": True,
-            "want_assertions_or_response_signed": False,
+            "want_assertions_or_response_signed": True,
         }
         for attr, val_default in attribute_defaults.items():
             val_config = self.config.getattr(attr, "sp")
             val = val_config if val_config is not None else val_default
-            if val == "true":
-                val = True
+            if isinstance(val, str):
+                val = val.strip().lower() == "true"
             setattr(self, attr, val)
 
         if self.entity_type == "sp" and not any(
@@ -182,15 +181,14 @@ class Base(Entity):
                 self.want_assertions_or_response_signed,
             ]
         ):
-            warn_msg = (
+            error_msg = (
                 "The SAML service provider accepts "
                 "unsigned SAML Responses and Assertions. "
-                "This configuration is insecure. "
-                "Consider setting want_assertions_signed, want_response_signed "
+                "This configuration is insecure and is no longer supported. "
+                "Set at least one of want_assertions_signed, want_response_signed "
                 "or want_assertions_or_response_signed configuration options."
             )
-            logger.warning(warn_msg)
-            _warn(warn_msg)
+            raise SAMLError(error_msg)
 
         self.artifact2response = {}
 
@@ -819,19 +817,34 @@ class Base(Entity):
         kwargs = {
             "entity_id": self.config.entityid,
             "attribute_converters": self.config.attribute_converters,
+            "want_assertions_signed": self.want_assertions_signed,
+            "want_assertions_or_response_signed": self.want_assertions_or_response_signed,
+            "want_response_signed": self.want_response_signed,
         }
 
         return self._parse_response(response, AuthzResponse, "", binding, **kwargs)
 
     def parse_authn_query_response(self, response, binding=BINDING_SOAP):
         """Verify that the response is OK"""
-        kwargs = {"entity_id": self.config.entityid, "attribute_converters": self.config.attribute_converters}
+        kwargs = {
+            "entity_id": self.config.entityid,
+            "attribute_converters": self.config.attribute_converters,
+            "want_assertions_signed": self.want_assertions_signed,
+            "want_assertions_or_response_signed": self.want_assertions_or_response_signed,
+            "want_response_signed": self.want_response_signed,
+        }
 
         return self._parse_response(response, AuthnQueryResponse, "", binding, **kwargs)
 
     def parse_assertion_id_request_response(self, response, binding):
         """Verify that the response is OK"""
-        kwargs = {"entity_id": self.config.entityid, "attribute_converters": self.config.attribute_converters}
+        kwargs = {
+            "entity_id": self.config.entityid,
+            "attribute_converters": self.config.attribute_converters,
+            "want_assertions_signed": self.want_assertions_signed,
+            "want_assertions_or_response_signed": self.want_assertions_or_response_signed,
+            "want_response_signed": self.want_response_signed,
+        }
 
         res = self._parse_response(response, AssertionIDResponse, "", binding, **kwargs)
         return res
@@ -839,7 +852,13 @@ class Base(Entity):
     # ------------------------------------------------------------------------
 
     def parse_attribute_query_response(self, response, binding):
-        kwargs = {"entity_id": self.config.entityid, "attribute_converters": self.config.attribute_converters}
+        kwargs = {
+            "entity_id": self.config.entityid,
+            "attribute_converters": self.config.attribute_converters,
+            "want_assertions_signed": self.want_assertions_signed,
+            "want_assertions_or_response_signed": self.want_assertions_or_response_signed,
+            "want_response_signed": self.want_response_signed,
+        }
 
         return self._parse_response(response, AttributeResponse, "attribute_consuming_service", binding, **kwargs)
 

@@ -91,6 +91,8 @@ class TestResponse:
             outstanding_queries={"id12": "http://localhost:8088/sso"},
             timeslack=TIMESLACK,
             decode=False,
+            want_response_signed=False,
+            want_assertions_signed=False,
         )
 
         assert isinstance(resp, StatusResponse)
@@ -105,6 +107,8 @@ class TestResponse:
             outstanding_queries={"id12": "http://localhost:8088/sso"},
             timeslack=TIMESLACK,
             decode=False,
+            want_response_signed=False,
+            want_assertions_signed=False,
         )
 
         assert isinstance(resp, StatusResponse)
@@ -119,6 +123,8 @@ class TestResponse:
             outstanding_queries={"id12": "http://localhost:8088/sso"},
             timeslack=TIMESLACK,
             decode=False,
+            want_response_signed=False,
+            want_assertions_signed=False,
         )
 
         assert isinstance(resp, StatusResponse)
@@ -141,6 +147,8 @@ class TestResponse:
             },
             timeslack=TIMESLACK,
             decode=False,
+            want_response_signed=False,
+            want_assertions_signed=False,
         )
 
         assert isinstance(resp, StatusResponse)
@@ -159,11 +167,14 @@ class TestResponse:
             outstanding_queries={"id-f4d370f3d03650f3ec0da694e2348bfe": "http://localhost:8088/sso"},
             timeslack=TIMESLACK,
             decode=False,
+            want_response_signed=False,
+            want_assertions_signed=False,
         )
 
         assert isinstance(resp, StatusResponse)
         assert isinstance(resp, AuthnResponse)
         resp.sec.only_use_keys_in_metadata = False
+        resp.response_is_signed = True
         resp.parse_assertion()
         si = resp.session_info()
         assert si

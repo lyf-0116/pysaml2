@@ -13,6 +13,7 @@ from saml2.entity import ARTIFACT_TYPECODE
 from saml2.entity import create_artifact
 from saml2.s_utils import sid
 from saml2.server import Server
+from saml2.samlp import response_from_string
 
 
 __author__ = "rolandh"
@@ -176,8 +177,11 @@ def test_artifact_flow():
             },
             name_id=name_id,
             authn=AUTHN,
+            sign_response=True,
             **resp_args,
         )
+        if isinstance(response, str):
+            response = response_from_string(response)
 
         print(response)
 
@@ -227,6 +231,8 @@ def test_artifact_flow():
         # ========== SP ============
 
         msg = get_msg(hinfo, BINDING_SOAP)
+        sp.want_response_signed = False
+        sp.want_assertions_or_response_signed = False
         sp_resp = sp.parse_artifact_resolve_response(msg)
 
         assert sp_resp.id == response.id

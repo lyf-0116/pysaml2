@@ -8,6 +8,7 @@ import itertools
 import logging
 import os
 import re
+import warnings
 from datetime import datetime
 from datetime import timezone
 from importlib.resources import files as _resource_files
@@ -374,7 +375,7 @@ def active_cert(key):
     try:
         cert_str = pem_format(key)
         cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_str)
-    except AttributeError:
+    except (AttributeError, crypto.Error, TypeError, ValueError):
         return False
 
     now = datetime.now(timezone.utc)
@@ -433,15 +434,17 @@ def cert_from_key_info_dict(key_info, ignore_age=False):
     return res
 
 
-def cert_from_instance(instance):
+def cert_from_instance(instance, ignore_age=False):
     """Find certificates that are part of an instance
 
     :param instance: An instance
+    :param ignore_age: Include certificates even if they are not currently
+        valid. The default is to only return active certificates.
     :return: possible empty list of certificates
     """
     if instance.signature:
         if instance.signature.key_info:
-            return cert_from_key_info(instance.signature.key_info, ignore_age=True)
+            return cert_from_key_info(instance.signature.key_info, ignore_age=ignore_age)
     return []
 
 
@@ -1183,7 +1186,7 @@ class SecurityContext:
         metadata=None,
         template="",
         encrypt_key_type="des-192",
-        only_use_keys_in_metadata=False,
+        only_use_keys_in_metadata=True,
         cert_handler_extra_class=None,
         generate_cert_info=None,
         tmp_cert_file=None,
@@ -1352,6 +1355,36 @@ class SecurityContext:
             node_id=node_id,
         )
 
+    def _cert_files_from_instance(self, item, issuer):
+        embedded_certs = cert_from_instance(item, ignore_age=False)
+        if embedded_certs:
+            warning_msg = (
+                "No signing certificate was found in metadata for issuer "
+                f"{issuer!r}; trusting a certificate embedded in the SAML "
+                "message as an explicit fallback. Configure the issuer "
+                "certificate in metadata and keep "
+                "only_use_keys_in_metadata=True to avoid accepting "
+                "self-asserted verification keys."
+            )
+            logger.warning(warning_msg)
+            warnings.warn(warning_msg, DeprecationWarning, stacklevel=3)
+        elif cert_from_instance(item, ignore_age=True):
+            logger.warning(
+                "No usable certificate embedded in the SAML message for "
+                "issuer %r; it may be expired, not yet valid, or malformed.",
+                issuer,
+            )
+
+        return [
+            make_temp(
+                content=pem_format(cert),
+                suffix=".pem",
+                decode=False,
+                delete_tmpfiles=self.delete_tmpfiles,
+            )
+            for cert in embedded_certs
+        ]
+
     def _check_signature(
         self, decoded_xml, item, node_name=NODE_NAME, origdoc=None, must=False, only_valid_cert=False, issuer=None
     ):
@@ -1386,10 +1419,7 @@ class SecurityContext:
 
         if not certs and not self.only_use_keys_in_metadata:
             logger.debug("==== Certs from instance ====")
-            certs = [
-                make_temp(content=pem_format(cert), suffix=".pem", decode=False, delete_tmpfiles=self.delete_tmpfiles)
-                for cert in cert_from_instance(item)
-            ]
+            certs = self._cert_files_from_instance(item, _issuer)
         else:
             logger.debug("==== Certs from metadata ==== %s: %s ====", _issuer, certs)
 

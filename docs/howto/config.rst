@@ -1347,9 +1347,19 @@ Example::
 only_use_keys_in_metadata
 """""""""""""""""""""""""
 
-If set to False, the certificate contained in a SAML message will be used for
-signature verification.
-Default True.
+If set to ``True`` (the default), signatures are verified only with
+certificates published in the peer metadata. If metadata does not contain a
+certificate for the issuer, verification fails.
+
+Set this to ``False`` only as an explicit compatibility fallback. PySAML2 will
+then use a valid, currently active certificate contained in the SAML message
+when no metadata certificate is available. Such a certificate is not trusted
+because the message controls both the signature and the certificate. Deployments
+that rely on this fallback should add the issuer certificate to metadata and
+keep this option enabled; use of the fallback emits a deprecation warning.
+
+The ``SecurityContext`` constructor also defaults to metadata-only verification.
+Pass ``only_use_keys_in_metadata=False`` explicitly to opt into the fallback.
 
 validate_certificate
 """"""""""""""""""""
